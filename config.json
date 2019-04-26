@@ -1,0 +1,86 @@
+{
+    "docmap": {
+        "CHARACTER SHEET": {
+            "traits": {
+                "rating": "Y",
+                "mod": "AD",
+                "STR": "19",
+                "FOR": "21",
+                "AGL": "23",
+                "INT": "25",
+                "IMG": "27",
+                "CHR": "29"
+            },
+            "vitality": "C20",
+            "gv": "H20",
+            "lp": "C27",
+            "mb": "H27",
+            "rung": "AK20",
+            "defence": "AP20",
+            "awareness": "AK27",
+            "avoidance": "AP27",
+            "xp": "P13",
+            "chumhandle": "K10"
+        },
+        "PROSPIT": {
+            "traits": {
+                "rating": "Y",
+                "mod": "AD",
+                "STR": "10",
+                "FOR": "12",
+                "AGL": "14",
+                "INT": "16",
+                "IMG": "18",
+                "CHR": "20"
+            },
+            "vitality": "C11",
+            "gv": "H11",
+            "lp": "C18",
+            "mb": "H18",
+            "rung": "AK11",
+            "defence": "AP11",
+            "awareness": "AK18",
+            "avoidance": "AP18"
+        },
+        "DERSE": {
+            "traits": {
+                "rating": "Y",
+                "mod": "AD",
+                "STR": "10",
+                "FOR": "12",
+                "AGL": "14",
+                "INT": "16",
+                "IMG": "18",
+                "CHR": "20"
+            },
+            "vitality": "C11",
+            "gv": "H11",
+            "lp": "C18",
+            "mb": "H18",
+            "rung": "AK11",
+            "defence": "AP11",
+            "awareness": "AK18",
+            "avoidance": "AP18"
+        },
+        "SYLLADEX": {
+            "grist": {
+                "build": "N10",
+                "shale": "N12",
+                "tar": "N14",
+                "chalk": "N16",
+                "iodine": "N18",
+                "marble": "N20",
+                "mercury": "AE10",
+                "ruby": "AE12",
+                "gold": "AE14",
+                "uranium": "AE16",
+                "diamond": "AE18",
+                "artifact": "AE20"
+            }
+        }
+    },
+    "documents": "documents.json",
+    "credentials": "credentials.json",
+    "token": "token.json",
+    "bot_token": ""
+}

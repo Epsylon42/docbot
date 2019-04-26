@@ -1,0 +1,12 @@
+{
+  "name": "docbot",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {
+    "discord.js": "^11.4.2",
+    "fs-extra": "^7.0.1",
+    "googleapis": "^39.2.0"
+  }
+}
