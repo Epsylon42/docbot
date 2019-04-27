@@ -246,13 +246,15 @@ show <NAME> grist
 show [prospit|derse] <NAME> traits
 show [prospit|derse] <NAME> {<STAT>}:
     show specified stats
-    the list is space-separated e.g.
+    the list is space-separated
+    example:
         show Name stats vitality luck
 
 change <NAME> grist {<GRIST-TYPE> <OPERATION> <AMOUNT>;}
     change grist values
     allowed operations: add, sub, set
-    the list is separated either by semicolons or by newlines e.g.
+    the list is separated either by semicolons or by newlines
+    example:
         change Name grist build add 5; shale sub 5; artifact set 5
         OR
         change Name grist
@@ -263,6 +265,18 @@ change <NAME> grist {<GRIST-TYPE> <OPERATION> <AMOUNT>;}
 change <NAME> xp <OPERATION> <AMOUNT>:
     pretty much the same as above but for xp
     allowed operations: add, sub, set
+
+roll <NUM>d<SIZE> [+|- <MODIFIER>]:
+    rolls dice
+    example:
+        roll 1d20
+        roll 10d4 + 5
+        roll 2d8 - 1
+
+roll <NAME> <TRAIT>:
+    rolls 1d20 using specified trait as a modifier
+    example:
+        roll Name str
 \`\`\`
 `;
 }
