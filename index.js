@@ -267,6 +267,97 @@ change <NAME> xp <OPERATION> <AMOUNT>:
 `;
 }
 
+function rollTrait(matches, msg, config, sheets) {
+    const name = matches.groups.name;
+    const moon = (matches.groups.moon || '').trim().toLowerCase();
+    const trait = matches.groups.trait;
+
+    const subsheet = moon ? moon.toUpperCase() : 'CHARACTER SHEET';
+    const traitmap = config.docmap[subsheet].traits;
+
+    const number = traitmap[trait.toUpperCase()] || traitmap[requests.aliases[trait.toLowerCase()]];
+    if (number == null) {
+        throw new Error(`Unknown trait: ${trait}`);
+    }
+
+    return withDocId(config, name, async id => {
+        const mod = await requests.batchGet(
+            id, [`${subsheet}!${traitmap.mod}${number}`], sheets
+        );
+
+        const result = Math.floor(Math.random()*20) + 1;
+
+        const decorate = num => {
+            if (num == 1) {
+                return `**${num}**`;
+            } else if (num == 20) {
+                return `**${num}**`;
+            } else {
+                return num;
+            }
+        };
+        const op = mod < 0 ? '-' : '+';
+
+        return `roll (1d20 + ${trait}): ${decorate(result)} ${op} ${Math.abs(mod)} = __${result + Number(mod)}__`;
+    });
+}
+
+async function rollCustom(matches, msg, config, sheets) {
+    const num = Number(matches.groups.num);
+    const size = Number(matches.groups.size);
+    const op = matches.groups.op;
+    const mod = matches.groups.mod;
+    const opmod = Number(op + mod) || 0;
+
+    const op_and_mod = opmod == 0 ? '' : ` ${op} ${mod}`;
+
+    if (num > 200) {
+        throw new Error(`That's a lot of dice. Are you trying to kill me?`);
+    }
+
+    const rolls = new Array(num)
+          .fill(0)
+          .map(() => Math.floor(Math.random()*size) + 1);
+
+    if (rolls.length == 1) {
+        const decorate = num => {
+            if (size == 20) {
+                if (num == 1) {
+                    return `**${num}**`;
+                } else if (num == 20) {
+                    return `**${num}**`;
+                } else {
+                    return num;
+                }
+            } else {
+                return num;
+            }
+        }
+
+        return `roll (1d${size}${op_and_mod}): ${decorate(rolls[0])}${op_and_mod} = __${rolls[0] + opmod}__`;
+    } else if (rolls.length <= 10) {
+        return `roll (${num}d${size}${op_and_mod}): [${rolls.join(' + ')}]${op_and_mod} = __${rolls.reduce((a, b) => a + b) + opmod}__`;
+    } else {
+        const longest = rolls
+              .map(roll => String(roll).length)
+              .reduce((a, b) => a > b ? a : b);
+
+        const pad = roll => roll + ' '.repeat(longest - String(roll).length);
+
+        const chunks = new Array(Math.ceil(rolls.length / 10))
+              .fill(0)
+              .map((_, i) => rolls.slice(i*10, (i+1)*10));
+
+        return `roll (${num}d${size}${op_and_mod}):` +
+            '```[\n' +
+            chunks
+            .map(chunk => ' '.repeat(4) + chunk.map(roll => pad(roll)).join(' + '))
+            .join('\n')
+        + '\n]```' +
+        `${op_and_mod} = __${rolls.reduce((a, b) => a + b) + opmod}__`;
+    }
+}
+
 const commands = [
     [/add document (?<name>\w+) (?<id>\w+)$/, addDocument],
     [/remove document (?<name>\w+)$/, removeDocument],
@@ -276,6 +367,8 @@ const commands = [
     [/show(?<moon> [Pp]rospit| [Dd]erse)? (?<name>\w+) (?<stats>(\w+,? )*\w+)$/, showStats],
     [/change (?<name>\w+) (xp|experience) (?<op>add|sub|set) (?<amount>[0-9]+)$/, changeExp],
     [/change (?<name>\w+) grist\s+(?<changes>([a-zA-Z]+ (add|sub|set) [0-9]+;?\s+)*[a-zA-Z]+ (add|sub|set) [0-9]+)$/, changeGrist],
+    [/roll (?<num>[1-9][0-9]*)d(?<size>[1-9][0-9]*)( ?(?<op>\+|-) ?(?<mod>[0-9]+))?/, rollCustom],
+    [/roll(?<moon> [Pp]rospit| [Dd]erse)? (?<name>\w+) (?<trait>\w+)/, rollTrait],
     [/help$/, help],
  ];
 

@@ -206,6 +206,7 @@ function setData(id, subsheet, pairs, config, sheets) {
 }
 
 module.exports = {
+    aliases,
     batchGet,
     batchSet,
     getTraits,
