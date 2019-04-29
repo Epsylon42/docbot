@@ -10,6 +10,7 @@ const aliases = {
     charm: "CHR",
     charisma: "CHR",
 
+    hp: "vitality",
     gel_viscosity: "gv",
     viscosity: "gv",
     luck_points: "lp",

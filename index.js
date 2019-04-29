@@ -266,7 +266,6 @@ async function changeVitality(matches, msg, config, sheets) {
     const subsheet = moon ? moon.toUpperCase() : "CHARACTER SHEET";
 
     const op = matches.groups.op;
-    const amount = Number(matches.groups.amount);
 
     const [[, viscosity]] = await withDocId(config, name, id => requests.getData(
         id, subsheet, ['viscosity'], config, sheets
@@ -274,6 +273,13 @@ async function changeVitality(matches, msg, config, sheets) {
 
     if (!Number.isInteger(Number(viscosity))) {
         throw new Error(`The sheet has invalid *gel viscosity* value: ${viscosity}`);
+    }
+
+    let amount = null;
+    if (matches.groups.amount === 'max') {
+        amount = Number(viscosity);
+    } else {
+        amount = Number(matches.groups.amount);
     }
 
     const { old_val, new_val, overflow } = await changeValue(config, sheets, {
@@ -341,7 +347,7 @@ change <NAME> xp <OPERATION> <AMOUNT>:
     pretty much the same as above but for xp
     allowed operations: add, sub, set
 
-change [prospit|derse] <NAME> vitality|hp <OPERATION> <AMOUNT>:
+change [prospit|derse] <NAME> vitality|hp <OPERATION> <AMOUNT>|max:
     change health
 
 roll <NUM>d<SIZE> [+|- <MODIFIER>]:
@@ -457,7 +463,7 @@ const commands = [
     [/show (?<name>\w+) grist$/, showGrist],
     [/show(?<moon> [Pp]rospit| [Dd]erse)? (?<name>\w+) traits$/, showTraits],
     [/show(?<moon> [Pp]rospit| [Dd]erse)? (?<name>\w+) (?<stats>(\w+,? )*\w+)$/, showStats],
-    [/change(?<moon> [Pp]rospit| [Dd]erse)? (?<name>\w+) (vitality|hp) (?<op>add|sub|set) (?<amount>[0-9]+)/, changeVitality],
+    [/change(?<moon> [Pp]rospit| [Dd]erse)? (?<name>\w+) (vitality|hp) (?<op>add|sub|set) (?<amount>[0-9]+|max)/, changeVitality],
     [/change (?<name>\w+) (xp|experience) (?<op>add|sub|set) (?<amount>[0-9]+)$/, changeExp],
     [/change (?<name>\w+) grist\s+(?<changes>([a-zA-Z]+ (add|sub|set) [0-9]+;?\s+)*[a-zA-Z]+ (add|sub|set) [0-9]+)$/, changeGrist],
     [/roll (?<num>[1-9][0-9]*)d(?<size>[1-9][0-9]*)( ?(?<op>\+|-) ?(?<mod>[0-9]+))?/, rollCustom],
