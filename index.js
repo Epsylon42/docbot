@@ -187,37 +187,112 @@ function changeGrist(matches, msg, config, sheets) {
     })
 }
 
-function changeExp(matches, msg, config, sheets) {
+function changeValue(config, sheets, { name, op, amount, field, subsheet, max, min, clamp_min, clamp_max }) {
+    return withDocId(config, name, async id => {
+        const [[, current_value]] = await requests.getData(id, subsheet, [field], config, sheets);
+
+        let new_value = Number(current_value) || 0;
+        switch (op) {
+        case 'add':
+            new_value += amount;
+            break;
+
+        case 'sub':
+            new_value -= amount;
+            break;
+
+        case 'set':
+            new_value = amount;
+            break;
+        }
+
+        let overflow = false;
+        let underflow = false;
+        if (max != null && new_value > max) {
+            if (clamp_max) {
+                new_value = max;
+                overflow = true;
+            } else {
+                throw new Error('overflow');
+            }
+        }
+        if (min != null && new_value < min) {
+            if (clamp_min) {
+                new_value = min;
+                underflow = true;
+            } else {
+                throw new Error('underflow');
+            }
+        }
+
+        const [[, old_val, new_val]] = await requests.setData(
+            id, subsheet, [[field, new_value]], config, sheets
+        );
+
+        return {
+            old_val,
+            new_val,
+            overflow,
+            underflow,
+        };
+    });
+}
+
+async function changeExp(matches, msg, config, sheets) {
     const name = matches.groups.name;
     const op = matches.groups.op;
     const amount = Number(matches.groups.amount);
 
-    return withDocId(config, name, async id => {
-        const [[, current_value]] = await requests.getData(id, "CHARACTER SHEET", ['xp'], config, sheets);
-
-        let new_value = Number(current_value) || 0;
-        switch(op) {
-        case 'add':
-            new_value += Number(amount);
-            break;
-        case 'sub':
-            if (Number(amount) > new_value) {
-                throw new Error(`Tried to subtract more xp than you have:\n current ${new_value}, tried to subtract ${amount}`);
-            }
-            new_value -= Number(amount);
-            break;
-        case 'set':
-            new_value = Number(amount);
-            break;
-        }
-
-        const [[, old_val, new_val]] = await requests.setData(
-            id, "CHARACTER SHEET", [['xp', new_value]],
-            config, sheets
-        );
-
-        return `Xp changes for ${name}: was ${old_val}, became ${new_val}`;
+    const { old_val, new_val, underflow } = await changeValue(config, sheets, {
+        name, op, amount,
+        field: 'xp',
+        subsheet: 'CHARACTER SHEET',
+        min: 0,
+        clamp_min: true,
     });
+
+    let ret = `Xp changes for ${name}: was ${old_val}, became ${new_val}`;
+    if (underflow) {
+        ret += '\nTried to subtract more xp than you have. Value set to 0';
+    }
+
+    return ret;
+}
+
+async function changeVitality(matches, msg, config, sheets) {
+    const name = matches.groups.name;
+
+    const moon = (matches.groups.moon || '').trim().toLowerCase();
+    const subsheet = moon ? moon.toUpperCase() : "CHARACTER SHEET";
+
+    const op = matches.groups.op;
+    const amount = Number(matches.groups.amount);
+
+    const [[, viscosity]] = await withDocId(config, name, id => requests.getData(
+        id, subsheet, ['viscosity'], config, sheets
+    ));
+
+    if (!Number.isInteger(Number(viscosity))) {
+        throw new Error(`The sheet has invalid *gel viscosity* value: ${viscosity}`);
+    }
+
+    const { old_val, new_val, overflow } = await changeValue(config, sheets, {
+        name, op, amount,
+        field: 'vitality',
+        subsheet,
+        max: Number(viscosity),
+        clamp_max: true,
+    });
+
+    let ret = `Vitality changes for ${name}: was ${old_val}, became ${new_val}`;
+    if (overflow) {
+        ret += `\nTried to make vitality higher than maximum value. Value set to ${viscosity}`;
+    }
+    if (new_val < 0) {
+        ret += '\nYou vitality is below zero. Good luck.';
+    }
+
+    return ret;
 }
 
 async function help() {
@@ -265,6 +340,9 @@ change <NAME> grist {<GRIST-TYPE> <OPERATION> <AMOUNT>;}
 change <NAME> xp <OPERATION> <AMOUNT>:
     pretty much the same as above but for xp
     allowed operations: add, sub, set
+
+change [prospit|derse] <NAME> vitality|hp <OPERATION> <AMOUNT>:
+    change health
 
 roll <NUM>d<SIZE> [+|- <MODIFIER>]:
     rolls dice
@@ -379,6 +457,7 @@ const commands = [
     [/show (?<name>\w+) grist$/, showGrist],
     [/show(?<moon> [Pp]rospit| [Dd]erse)? (?<name>\w+) traits$/, showTraits],
     [/show(?<moon> [Pp]rospit| [Dd]erse)? (?<name>\w+) (?<stats>(\w+,? )*\w+)$/, showStats],
+    [/change(?<moon> [Pp]rospit| [Dd]erse)? (?<name>\w+) (vitality|hp) (?<op>add|sub|set) (?<amount>[0-9]+)/, changeVitality],
     [/change (?<name>\w+) (xp|experience) (?<op>add|sub|set) (?<amount>[0-9]+)$/, changeExp],
     [/change (?<name>\w+) grist\s+(?<changes>([a-zA-Z]+ (add|sub|set) [0-9]+;?\s+)*[a-zA-Z]+ (add|sub|set) [0-9]+)$/, changeGrist],
     [/roll (?<num>[1-9][0-9]*)d(?<size>[1-9][0-9]*)( ?(?<op>\+|-) ?(?<mod>[0-9]+))?/, rollCustom],
