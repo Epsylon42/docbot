@@ -3,7 +3,12 @@ const requests = require('./requests.js');
 const { Chain, Many, Exact, Pred, Either, Regex, Map } = require('./parser.js');
 
 async function with_docs(config, callback) {
-    const docs = JSON.parse(await fs.readFile(config.documents));
+    let docs = null;
+    try {
+        docs = JSON.parse(await fs.readFile(config.documents));
+    } catch (e) {
+        docs = {};
+    }
     const ret = await callback(docs);
     await fs.writeFile(config.documents, JSON.stringify(docs, null, 4));
     return ret;
