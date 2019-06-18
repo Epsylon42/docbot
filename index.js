@@ -53,7 +53,12 @@ async function run() {
                             })
                     } catch (e) {
                         if (e instanceof ParserError) {
-                            msg.reply(`Parsing error: ${e.message}`);
+                            const rce = e.root_custom_error();
+                            if (rce) {
+                                msg.reply(`Parsing error: expected ${rce.message}`);
+                            } else {
+                                msg.reply(`Parsing error: expected ${e.message}`);
+                            }
                             console.error(e);
                             break;
                         } else {

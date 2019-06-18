@@ -19,42 +19,66 @@ class ParserInput {
 
 
 class ParserError extends Error {
-    constructor(input, parser, message) {
-        super();
+    constructor(input, message, prev, custom) {
+        super(message);
 
-        this.msg = message || ("expected " + parser.expects());
         this.input = input;
-        this.parser = parser;
+        this.prev = prev;
+        this.custom = custom;
+
+        if (prev) {
+            this.depth = prev.depth;
+        } else {
+            this.depth = 0;
+        }
     }
 
-    get message() {
-        return `at ${this.input.offset} ` + this.msg + ' got ' + this.input.data[0] || 'end of input';
+    root_custom_error() {
+        if (this.prev) {
+            const rce = this.prev.root_custom_error();
+            if (rce) {
+                return rce;
+            }
+        }
+
+        if (this.custom) {
+            return this;
+        } else {
+            return null;
+        }
     }
 }
 
 
 class Rule {
-    expect_hint(expectation) {
-        this.expectation = expectation;
-        return this;
-    }
-
     hide() {
         this.hidden = true;
         return this;
     }
 
-    expects() {
-        return this.expectation;
-    }
-
-    error(input, message) {
-        throw new ParserError(input, this, message);
-    }
-
     map(func) {
         return new Map(this, func);
     }
+
+    err_msg(msg) {
+        this.msg = msg;
+        return this;
+    }
+    set_expectation(ex) {
+        this.expectation = ex;
+    }
+    expects() {
+        return this.expectation;
+    }
+    error(input, prev) {
+        throw new ParserError(
+            input,
+            this.msg || this.expects(),
+            prev,
+            this.msg != null
+        );
+    }
+
 
     named(...names) {
         return new Map(this, arr => {
@@ -80,6 +104,18 @@ class Rule {
             .at_most(1)
             .map((arr) => arr.length === 0 ? null : arr[0]);
     }
+
+    parse(input) {
+        try {
+            return this._parse(input);
+        } catch (e) {
+            if (e instanceof ParserError) {
+                this.error(input, e);
+            } else {
+                throw e;
+            }
+        }
+    }
 }
 
 class Exact extends Rule {
@@ -87,7 +123,7 @@ class Exact extends Rule {
         super();
 
         this.word = word
-        this.expect_hint("'" + word + "'");
+        this.set_expectation("'" + word + "'");
     }
 
     ignore_case() {
@@ -95,7 +131,7 @@ class Exact extends Rule {
         return this;
     }
 
-    parse(input) {
+    _parse(input) {
         let matches = null;
 
         if (this._ignore_case) {
@@ -114,31 +150,46 @@ class Exact extends Rule {
     }
 }
 
-class Chain extends Rule {
+class RuleHelper extends Rule {
+    chain(func) {
+        return this.with(func(new Chain()));
+    }
+    chain_hidden(func) {
+        return this.with_hidden(func(new Chain()));
+    }
+
+    either(func) {
+        return this.with(func(new Either()));
+    }
+    either_hidden(func) {
+        return this.with_hidden(func(new Either()));
+    }
+}
+
+class Chain extends RuleHelper {
     constructor() {
         super();
 
-        this.chain = [];
+        this.parsers = [];
     }
 
     expects() {
         return 'chain [' +
-            this.chain
+            this.parsers
             .map(p => p.expects())
             .join(', ') +
             ']';
     }
 
     with(parser) {
-        this.chain.push(to_parser(parser));
+        this.parsers.push(to_parser(parser));
         if (this.spaces) {
             this.with_spaces();
         }
         return this;
     }
-
     with_hidden(parser) {
-        this.chain.push(to_parser(parser).hide());
+        this.parsers.push(to_parser(parser).hide());
         if (this.spaces) {
             this.with_spaces();
         }
@@ -146,14 +197,14 @@ class Chain extends Rule {
     }
 
     with_spaces() {
-        this.chain.push(new Spaces().hide());
+        this.parsers.push(new Spaces().hide());
         return this;
     }
 
     interleave_spaces() {
         this.spaces = true;
-        if (this.chain.length === 0 ||
-            !(this.chain[this.chain.length] instanceof Spaces)) {
+        if (this.parsers.length === 0 ||
+            !(this.parsers[this.parsers.length] instanceof Spaces)) {
 
             this.with_spaces();
         }
@@ -162,22 +213,45 @@ class Chain extends Rule {
 
     no_interleave_spaces() {
         this.spaces = false;
-        if (this.chain.length !== 0 &&
-            this.chain[this.chain.length] instanceof Spaces) {
+        if (this.parsers.length !== 0 &&
+            this.parsers[this.parsers.length] instanceof Spaces) {
 
-            this.chain.pop();
+            this.parsers.pop();
         }
         return this;
     }
 
-    parse(input) {
-        return this.chain.reduce(
-            ([done, rest], parser) => {
-                let [result, new_rest] = parser.parse(rest);
-                if (!parser.hidden) {
-                    done.push(result);
+    _parse(input) {
+        return this.parsers.reduce(
+            ([done, rest], parser, index) => {
+                try {
+                    let [result, new_rest] = parser.parse(rest);
+                    if (!parser.hidden) {
+                        done.push(result);
+                    }
+                    return [done, new_rest];
+                } catch (e) {
+                    if (e instanceof ParserError) {
+                        let additional_depth = 0;
+                        for (let i = 0; i < index; i++) {
+                            let elem = this.parsers[i];
+                            if (elem instanceof Spaces) {
+                                continue;
+                            }
+                            if (elem instanceof Map) {
+                                elem = elem.parser;
+                            }
+                            if (elem instanceof Many) {
+                                if (elem.at_least_n == 0 && elem.at_most_n == 1) {
+                                    continue;
+                                }
+                            }
+                            additional_depth += 1;
+                        }
+                        e.depth += additional_depth;
+                    }
+                    throw e;
                 }
-                return [done, new_rest];
             },
             [[], input]
         );
@@ -231,8 +305,10 @@ class Many extends Rule {
         }
     }
 
-    parse(input) {
+    _parse(input) {
         let results = [];
+
+        let prev_error = null;
 
         try {
             while (true) {
@@ -250,18 +326,21 @@ class Many extends Rule {
         } catch (e) {
             if (!(e instanceof ParserError)) {
                 throw e;
+            } else {
+                prev_error = e;
+                prev_error.depth += results.length;
             }
         }
 
         if (!this.got_enough(results)) {
-            this.error(input);
+            this.error(input, prev_error);
         }
 
         return [results, input];
     }
 }
 
-class Either extends Rule {
+class Either extends RuleHelper {
     constructor() {
         super();
 
@@ -286,33 +365,60 @@ class Either extends Rule {
         return this;
     }
 
-    parse(input) {
+    _parse(input) {
         if (this.either.length === 0) {
             throw new Error('Either rule must have at least one variant');
         }
+
+        let errors = [];
 
         for (const parser of this.either) {
             try {
                 return parser.parse(input);
             } catch (e) {
-                if (!(e instanceof ParserError)) {
+                if (e instanceof ParserError) {
+                    errors.push(e);
+                } else {
                     throw e;
                 }
             }
         }
 
-        this.error(input);
+        const max_depth = errors
+            .map(e => e.depth)
+            .reduce((a, b) => a > b ? a : b, 0);
+        const unfiltered_len = errors.length;
+        errors = errors
+            .filter(e => e.depth == max_depth);
+        if (errors.length == 0) {
+            this.error(input);
+        } else if (errors.length == 1) {
+            this.error(input, errors[0]);
+        } else {
+            let messages = errors
+                  .map(e => {
+                      const rce = e.root_custom_error();
+                      return rce ? [rce.message, true] : [e.message, false];
+                  });
+            const custom = messages
+                  .filter(([, custom]) => custom)
+                  .length > 0;
+            messages = messages
+                .map(([msg,]) => msg)
+                .join(" or ");
+            throw new ParserError(input, `one of (${messages})`, null, custom);
+        }
     }
 }
 
 class Spaces extends Rule {
     constructor() {
         super();
-        this.expect_hint('spaces');
+        this.set_expectation('spaces');
         this.hide();
     }
 
-    parse(input) {
+    _parse(input) {
         let spaces = input.data.match(/^\s*/);
         if (spaces) {
             return [spaces[0], input.split(spaces[0].length).right()];
@@ -335,7 +441,7 @@ class Map extends Rule {
         return this.parser.expects();
     }
 
-    parse(input) {
+    _parse(input) {
         let [result, rest] = this.parser.parse(input);
         return [this.func(result), rest];
     }
@@ -346,10 +452,10 @@ class Pred extends Rule {
         super();
 
         this.pred = pred;
-        this.expect_hint('character matching a predicate');
+        this.set_expectation('character matching a predicate');
     }
 
-    parse(input) {
+    _parse(input) {
         if (!this.pred(input.data[0])) {
             this.error(input);
         } else {
@@ -358,7 +464,7 @@ class Pred extends Rule {
     }
 
     static eoi() {
-        return new Pred(x => x === undefined).expect_hint('end of input');
+        return new Pred(x => x === undefined).err_msg('end of input');
     }
 }
 
@@ -374,10 +480,10 @@ class Regex extends Rule {
         }
 
         this.regex = RegExp(str);
-        this.expect_hint(`regex ${regex}`);
+        this.set_expectation(`regex ${regex}`);
     }
 
-    parse(input) {
+    _parse(input) {
         let matches = input.data.match(this.regex);
         if (matches) {
             return [matches, input.split(matches[0].length).right()];

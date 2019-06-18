@@ -25,6 +25,18 @@ function with_doc_id(config, name, callback) {
     });
 }
 
+function name() {
+    return new Regex(/[a-zA-Z]\w*/)
+        .map(m => m[0])
+        .err_msg("name");
+}
+
+function doc_id() {
+    return new Regex(/[0-9a-zA-Z_\-]+/)
+        .map(m => m[0])
+        .err_msg("document id");
+}
+
 
 class Command {
     parse() {
@@ -86,8 +98,8 @@ class AddDocument extends Command {
 
     arg_parser() {
         return this.parse()
-            .with(/\w+/)
-            .with(/\w+/)
+            .with(name())
+            .with(doc_id())
             .named('name', 'id');
     }
 
@@ -120,7 +132,7 @@ class RemoveDocument extends Command {
 
     arg_parser() {
         return this.parse()
-            .with(/\w+/)
+            .with(name())
             .named('name');
     }
 
@@ -170,22 +182,22 @@ class Show extends Command {
 
     arg_parser() {
         return this.parse()
-            .with(/\w+/)
-            .with(
-                new Either()
+            .with(name())
+            .either(
+                e => e
                     .with(new Exact('grist').branch('grist'))
-                    .with(
-                        new Chain()
+                    .chain(
+                        c => c
                             .interleave_spaces()
-                            .with(
-                                new Either()
+                            .either(
+                                e => e
                                     .with(/[Pp]rospit/)
                                     .with(/[Dd]erse/)
                                     .map(s => s.toUpperCase())
                                     .opt()
                             )
-                            .with(
-                                new Either()
+                            .either(
+                                e => e
                                     .with(new Exact('traits').branch('traits'))
                                     .with(
                                         new Many(
@@ -195,6 +207,7 @@ class Show extends Command {
                                                 .map(arr => arr[0])
                                         )
                                             .at_least(1)
+                                            .err_msg("a space-separated list of stats")
                                             .branch('other-stats')
                                     )
                             )
@@ -214,7 +227,7 @@ class Show extends Command {
                             return obj;
                         }
                     })
-            )
+                   )
             .named('name', 'args');
     }
 
@@ -284,39 +297,41 @@ class Change extends Command {
         const op = new Either()
               .with('add')
               .with('sub')
-              .with('set');
+              .with('set')
+              .err_msg("an operation (add|sub|set)");
 
         return this.parse()
-            .with(/\w+/)
-            .with(
-                new Either()
-                    .with(
-                        new Chain()
+            .with(name())
+            .either(e => e
+                    .chain(
+                        c => c
                             .interleave_spaces()
-                            .with(
-                                new Either()
+                            .either(
+                                e => e
                                     .with(/[Pp]rospit/)
                                     .with(/[Dd]erse/)
                                     .map(s => s.toUpperCase())
                                     .opt()
                             )
-                            .with_hidden(
-                                new Either()
+                            .either_hidden(
+                                e => e
                                     .with('hp')
                                     .with('health')
                                     .with('vitality')
                             )
                             .with(op)
-                            .with(
-                                new Either()
+                            .either(
+                                e => e
                                     .with(new Map(/[0-9]+/, Number))
                                     .with('max')
+                                    .err_msg("an integer or 'max'")
                             )
                             .named('moon', 'op', 'amount')
                             .branch('hp')
+                            .err_msg("vitality change")
                     )
-                    .with(
-                        new Chain()
+                    .chain(
+                        c => c
                             .interleave_spaces()
                             .with_hidden(
                                 new Either()
@@ -325,34 +340,43 @@ class Change extends Command {
                                     .with('exp')
                             )
                             .with(op)
-                            .with(new Map(/[0-9]+/, Number))
+                            .with(new Map(/[0-9]+/, Number).err_msg("an integer"))
                             .named('op', 'amount')
                             .branch('xp')
+                            .err_msg("experience change")
                     )
-                    .with(
-                        new Chain()
+                    .chain(
+                        c => c
                             .interleave_spaces()
                             .with_hidden('grist')
                             .with(
                                 new Many(
                                     new Chain()
                                         .interleave_spaces()
-                                        .with(new Map(/\w+/, s => s.toLowerCase()))
+                                        .with(
+                                            new Map(/\w+/, s => s.toLowerCase())
+                                                .err_msg("grist type")
+                                        )
                                         .with(op)
-                                        .with(new Map(/[0-9]+/, Number))
-                                        .with_hidden(
-                                            new Either()
+                                        .with(
+                                            new Map(/[0-9]+/, Number)
+                                                .err_msg("an integer")
+                                        )
+                                        .either_hidden(
+                                            e => e
                                                 .with(';')
                                                 .with('\n')
                                                 .with(Pred.eoi())
+                                                .err_msg("a separator (a semicolon or a new line)")
                                         )
                                         .named('type', 'op', 'amount')
                                 ).at_least(1)
                             )
                             .map(arr => arr[0])
                             .branch('grist')
+                            .err_msg("grist change")
                     )
-            )
+                   )
             .named('name', 'args');
     }
 
@@ -558,28 +582,32 @@ class Roll extends Command {
 
     arg_parser() {
         return new Either()
-            .with(
-                new Chain()
+            .chain(
+                c => c
                     .interleave_spaces()
-                    .with(/\w+/)
-                    .with(
-                        new Either()
+                    .with(name())
+                    .either(
+                        e => e
                             .with(/[Pp]rospit/)
                             .with(/[Dd]erse/)
                             .map(s => s.toUpperCase())
                             .opt()
                     )
-                    .with(/\w+/)
+                    .with(new Regex(/\w+/).map(m => m[0]).err_msg("a trait"))
                     .named('name', 'moon', 'trait')
                     .branch('trait')
             )
-            .with(
-                new Chain()
-                    .with_spaces()
-                    .with(new Map(/[1-9][0-9]*/, Number))
-                    .with_hidden('d')
-                    .with(new Map(/[1-9][0-9]*/, Number))
-                    .with_spaces()
+            .chain(
+                c => c
+                    .chain(
+                        c => c
+                            .with_spaces()
+                            .with(new Map(/[1-9][0-9]*/, Number))
+                            .with_hidden('d')
+                            .with(new Map(/[1-9][0-9]*/, Number))
+                            .with_spaces()
+                            .err_msg("dice description (XdY)")
+                    )
                     .with(
                         new Many(
                             new Chain()
@@ -588,14 +616,19 @@ class Roll extends Command {
                                     new Either()
                                         .with('+')
                                         .with('-')
+                                        .err_msg("an operation (+|-)")
                                 )
-                                .with(new Map(/[1-9][0-9]*/, Number))
+                                .with(
+                                    new Map(/[1-9][0-9]*/, Number)
+                                        .err_msg("an integer (dice modifier)")
+                                )
                                 .named('op', 'mod')
                         )
                     )
-                    .named('num', 'size', 'mods')
+                    .map(([[num, size], mods]) => ({ num, size, mods }))
                     .branch('custom')
-            );
+            )
+            .err_msg("roll description")
     }
 
     execute({ branch, value: args }, config, sheets) {
