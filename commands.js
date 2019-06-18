@@ -74,10 +74,10 @@ square brackets mean optional parameters
 curly braces mean multiple arguments
 \`|\` means \`or\`
 
-The author of this bot is good at writing parsers
-but not very good at error handling, so expect
-a lot of incomprehensible yelling thrown your
-way when you make a typo
+The error messages are supposed to be reasonably
+human-readable, but you may still get some corner cases
+where the bot will spit out its
+incomprehensible internals at you
 
 commands:
 \`\`\`
